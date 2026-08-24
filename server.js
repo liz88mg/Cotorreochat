@@ -1,0 +1,9 @@
+const path=require('path'); const http=require('http'); const express=require('express'); const {Server}=require('socket.io');
+const app=express(); const server=http.createServer(app); const io=new Server(server); const PORT=process.env.PORT||10000; const rooms=new Map();
+app.get('/health',(_req,res)=>res.json({ok:true,service:'CotorreoChat'})); app.use(express.static(path.join(__dirname,'public')));
+io.on('connection',socket=>{socket.data.room=null;socket.data.nickname='Invitado';
+socket.on('joinRoom',({room,nickname}={})=>{const r=String(room||'General Latinoamérica').slice(0,60),n=String(nickname||'Invitado').slice(0,20); if(socket.data.room){const old=socket.data.room;rooms.get(old)?.delete(socket.id);socket.leave(old);io.to(old).emit('presence',rooms.get(old)?.size||0)} if(!rooms.has(r))rooms.set(r,new Set());rooms.get(r).add(socket.id);socket.data.room=r;socket.data.nickname=n;socket.join(r);socket.emit('joined',{room:r,nickname:n});io.to(r).emit('presence',rooms.get(r).size);socket.to(r).emit('system',`${n} entró a la sala.`)});
+socket.on('message',msg=>{const r=socket.data.room,t=String(msg||'').trim().slice(0,2000);if(r&&t)io.to(r).emit('message',{nickname:socket.data.nickname,text:t,time:new Date().toISOString()})});
+socket.on('youtube',url=>{const r=socket.data.room,u=String(url||'').trim().slice(0,500);if(r&&/^https?:\\/\\/(www\\.)?(youtube\\.com|youtu\\.be)\\//i.test(u))io.to(r).emit('youtube',{nickname:socket.data.nickname,url:u})});
+socket.on('disconnect',()=>{const r=socket.data.room;if(r){rooms.get(r)?.delete(socket.id);io.to(r).emit('presence',rooms.get(r)?.size||0);io.to(r).emit('system',`${socket.data.nickname} salió de la sala.`)}})});
+app.get('*',(_req,res)=>res.sendFile(path.join(__dirname,'public','index.html'))); server.listen(PORT,'0.0.0.0',()=>console.log(`CotorreoChat listening on ${PORT}`));
